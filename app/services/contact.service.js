@@ -1,0 +1,94 @@
+const { ObjectId } = require('mongodb');
+
+class ContactService {
+    constructor(client) {
+        this.Contact = client.db().collection('contacts');
+    }
+   // dinh ngia cac phuong thuc
+    extractContactData(payload) {
+        const contact = {
+            name: payload.name,
+            email: payload.email,
+            address: payload.address,
+            phone: payload.phone,
+            favorite: payload.favorite,
+        };
+        //remove undefined fields
+        Object.keys(contact).forEach(
+            (key) => contact[key] === undefined && delete contact[key]
+        );
+        return contact;
+    }
+
+    async create(payload) {
+        const contact = this.extractContactData(payload);
+        const result = await this.Contact.findOneAndUpdate(
+            contact,
+            { $set: {favorite: contact.favorite === true} },
+            { returnDocument: 'after', upsert: true}
+            );
+        return result;
+    }
+
+
+    async find (filter) {
+        const cursor = this.Contact.find(filter);
+        return await cursor.toArray();
+    }
+
+    async findByName(name) {
+        return await this.find({
+            name: {$regex: new RegExp(new RegExp(name)), $options: 'i'}
+        });
+    }
+
+    async findById(id) {
+        if (!ObjectId.isValid(id)) {
+            throw new Error('Invalid ObjectId');
+        }
+        try {
+            const contact = await this.Contact.findOne({
+                _id: new ObjectId(id),
+            });
+            if (!contact) {
+                console.error('No document found with the given id:', id);
+                throw new Error('No document found with the given id');
+            }
+            return contact;
+        } catch (error) {
+            console.error('Error occurred while retrieving the contact:', error);
+            throw error;
+        }
+    }
+
+    async update(id, payload) {
+        const filter = {
+            _id: ObjectId.isValid(id) ? new ObjectId(id) : null,
+        };    
+        const update = this.extractContactData(payload);
+        const result = await this.Contact.findOneAndUpdate(
+            filter,
+            { $set: update },
+            { returnDocument: 'after' }
+        );
+        return result.updatedExisting;
+    }
+
+    async delete(id) {
+        const result = await this.Contact.findOneAndDelete({
+            _id: ObjectId.isValid(id) ? new ObjectId(id) : null,
+        });
+        return result;
+    }
+
+    async findFavorite() {
+        return await this.find({ favorite: true });
+    }
+
+    async deleteAll (){
+        const result = await this.Contact.deleteMany({});
+        return result.deletedCount;
+    }
+}
+
+module.exports = ContactService;
